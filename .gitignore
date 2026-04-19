@@ -73,3 +73,7 @@ Taipei-City-Dashboard-DE/docker/prod/.env
 *.py[cod]
 
 *.env
+
+# Local documentation and dataset exports
+Taipei-City-Dashboard-Documentation/
+/*.csv
