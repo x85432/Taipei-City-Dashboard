@@ -34,7 +34,12 @@ const chartOptions = ref({
 			val,
 			{ dataPointIndex }
 		) {
-			return dataPointIndex > 5 ? "" : val;
+			const labelLimit =
+				props.series[0]?.data.length > 20 ? 12 : props.series[0]?.data.length;
+			if (dataPointIndex >= labelLimit) {
+				return "";
+			}
+			return val.length > 7 ? val.slice(0, 6) + "..." : val;
 		},
 	},
 	grid: {
