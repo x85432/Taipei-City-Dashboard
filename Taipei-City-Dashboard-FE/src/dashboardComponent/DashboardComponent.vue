@@ -28,6 +28,7 @@ import BarChartWithGoal from "./components/BarChartWithGoal.vue";
 import IconPercentChart from "./components/IconPercentChart.vue";
 import IndicatorChart from "./components/IndicatorChart.vue";
 import TextUnitChart from "./components/TextUnitChart.vue";
+import CameraMonitorChart from "./components/CameraMonitorChart.vue";
 
 import MapLegendSvg from "./assets/chart/MapLegend.svg";
 import DistrictChartSvg from "./assets/chart/DistrictChart.svg";
@@ -48,6 +49,7 @@ import BarChartWithGoalSvg from "./assets/chart/BarChartWithGoal.svg";
 import TreemapChartSvg from "./assets/chart/TreemapChart.svg";
 import IndicatorChartSvg from "./assets/chart/IndicatorChart.svg";
 import TextUnitChartSvg from "./assets/chart/TextUnitChart.svg";
+import CameraMonitorChartSvg from "./assets/chart/CameraMonitorChart.svg";
 
 
 const props = defineProps({
@@ -222,6 +224,8 @@ function returnChartComponent(name, svg) {
 		return svg ? IndicatorChartSvg : IndicatorChart;
 	case "TextUnitChart":
 		return svg ? TextUnitChartSvg : TextUnitChart;
+	case "CameraMonitorChart":
+		return svg ? CameraMonitorChartSvg : CameraMonitorChart;
 	default:
 		return svg ? MapLegendSvg : MapLegend;
 	}
@@ -416,6 +420,7 @@ function returnChartComponent(name, svg) {
         'half-chart': mode === 'half',
         'mapopen-chart': mode === 'map',
         'halfmapopen-chart': mode === 'halfmap',
+        'dashboardcomponent-chart-custom-scroll': activeChart === 'CameraMonitorChart',
       }"
     >
       <component
@@ -751,6 +756,29 @@ button:hover {
 		p {
 			color: var(--color-border);
 		}
+	}
+
+	&-chart-custom-scroll {
+		min-height: 0;
+		overflow-x: hidden;
+		overflow-y: auto;
+		scrollbar-color: var(--color-highlight) rgba(255, 255, 255, 0.08);
+		scrollbar-width: thin;
+	}
+
+	&-chart-custom-scroll::-webkit-scrollbar {
+		display: block;
+		width: 6px;
+	}
+
+	&-chart-custom-scroll::-webkit-scrollbar-track {
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	&-chart-custom-scroll::-webkit-scrollbar-thumb {
+		border-radius: 999px;
+		background: var(--color-highlight);
 	}
 
 	&-loading {
