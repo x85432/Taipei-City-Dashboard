@@ -64,6 +64,11 @@ func newSession(req AIChatRequest, options ...llms.CallOption) *aiSession {
 	return s
 }
 
+type toolExecutionLog struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
 type aiSession struct {
 	req             AIChatRequest
 	options         []llms.CallOption
@@ -72,7 +77,7 @@ type aiSession struct {
 	totalInput      int
 	totalOutput     int
 	toolUsed        bool
-	executedTools   []string
+	executedTools   []toolExecutionLog
 	lastResp        *llms.ContentResponse
 	lastErr         error
 	startTime       time.Time
@@ -80,7 +85,7 @@ type aiSession struct {
 
 func (s *aiSession) run(ctx context.Context) (*models.AIChatLog, error) {
 	maxLoops := 5
-	s.executedTools = make([]string, 0)
+	s.executedTools = make([]toolExecutionLog, 0)
 	for i := 0; i < maxLoops; i++ {
 		s.sendHeartbeat(ctx)
 
@@ -156,7 +161,10 @@ func (s *aiSession) executeTools(ctx context.Context, toolCalls []llms.ToolCall)
 	})
 
 	for _, tc := range toolCalls {
-		s.executedTools = append(s.executedTools, tc.FunctionCall.Name)
+		s.executedTools = append(s.executedTools, toolExecutionLog{
+			Name:      tc.FunctionCall.Name,
+			Arguments: tc.FunctionCall.Arguments,
+		})
 		result, err := tools.Execute(ctx, tc.FunctionCall.Name, tc.FunctionCall.Arguments)
 		if err != nil {
 			result = fmt.Sprintf("Error: %v. Please verify arguments.", err)

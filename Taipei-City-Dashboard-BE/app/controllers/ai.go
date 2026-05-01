@@ -125,17 +125,18 @@ func ChatWithTWCC(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
-			"session":     logEntry.SessionID,
-			"content":     logEntry.Answer,
+			"session":        logEntry.SessionID,
+			"content":        logEntry.Answer,
 			"usage": gin.H{
 				"input_tokens":  logEntry.InputTokens,
 				"output_tokens": logEntry.OutputTokens,
 				"total_tokens":  logEntry.TotalTokens,
 			},
-			"tool_used":   logEntry.ToolUsed,
-			"latency_ms":  logEntry.LatencyMS,
-			"model":       logEntry.Model,
-			"provider":    logEntry.Provider,
+			"tool_used":      logEntry.ToolUsed,
+			"tools_executed": logEntry.Tools,
+			"latency_ms":     logEntry.LatencyMS,
+			"model":          logEntry.Model,
+			"provider":       logEntry.Provider,
 		},
 	})
 }

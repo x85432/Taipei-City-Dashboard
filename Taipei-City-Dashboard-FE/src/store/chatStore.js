@@ -121,18 +121,48 @@ export const useChatStore = defineStore('chat', () => {
 					content: m.content
 				}));
 
-			// 3. 呼叫後端 AI 接口
+			// 3. 呼叫後端 AI 接口，並附帶 Tools 定義
 			const response = await http.post("/ai/chat/twai", {
 				messages: messages,
-				stream: false // 目前先使用非串流模式
+				stream: false, // 目前先使用非串流模式
+				tools: [
+					{
+						type: "function",
+						function: {
+							name: "search_dashboard_components",
+							description: "當使用者詢問任何與城市、生活品質、交通、政策相關的探索性問題時，使用此工具來搜尋系統內有哪些可用的儀表板組件資料。傳入的關鍵字請盡量精簡為名詞，例如將『想了解台北市的交通狀況』轉換為『台北 交通』進行搜尋。",
+							parameters: {
+								type: "object",
+								properties: {
+									query: {
+										type: "string",
+										description: "要搜尋的關鍵字，例如 '商圈活化' 或 '智慧交通'"
+									}
+								},
+								required: ["query"]
+							}
+						}
+					}
+				],
+				tool_choice: "auto"
 			});
 
 			// 4. 將 AI 回覆加入畫面
 			if (response.data?.status === "success" && response.data.data?.content) {
+				const aiResponseContent = response.data.data.content;
+				
 				addChatData({ 
 					role: 'bot', 
-					content: response.data.data.content 
+					content: aiResponseContent 
 				});
+
+				// 5. 紀錄問答 log，如果 AI 有呼叫 Tool 也一併記錄
+				let logAnswer = aiResponseContent;
+				if (response.data.data.tool_used) {
+					logAnswer += `\n[System Log] 呼叫了工具: ${response.data.data.tools_executed}`;
+				}
+				saveChatLog(newChatData.content, logAnswer);
+
 			} else {
 				throw new Error("AI response format error");
 			}

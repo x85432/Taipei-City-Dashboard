@@ -17,6 +17,9 @@ func init() {
 	// Register demo tools
 	Register("get_current_time", GetCurrentTime)
 	Register("get_population_summary", GetPopulationSummary)
+	
+	// Register dashboard search tool
+	Register("search_dashboard_components", SearchDashboardComponents)
 }
 
 // Register adds a tool to the registry
@@ -95,4 +98,35 @@ func GetCurrentTime(ctx context.Context, args string) (string, error) {
 // Helper to parse JSON arguments if needed in future tools
 func parseArgs(args string, v interface{}) error {
 	return json.Unmarshal([]byte(args), v)
+}
+
+// SearchComponentArgs defines the arguments for the search_dashboard_components tool
+type SearchComponentArgs struct {
+	Query string `json:"query"`
+}
+
+// SearchDashboardComponents uses the embedding model to search for relevant dashboard components
+func SearchDashboardComponents(ctx context.Context, args string) (string, error) {
+	var params SearchComponentArgs
+	if err := parseArgs(args, &params); err != nil {
+		return "", fmt.Errorf("invalid arguments: %v", err)
+	}
+
+	// Search for top 5 relevant components with a score threshold of 0.7
+	results, err := models.GetComponentByQueryVector(params.Query, 5, 0.7)
+	if err != nil {
+		return "", fmt.Errorf("搜尋組件失敗: %v", err)
+	}
+
+	if len(results) == 0 {
+		return "查無相關的儀表板組件，請嘗試使用其他關鍵字搜尋。", nil
+	}
+
+	// Return JSON representation of the matched components
+	responseJSON, err := json.Marshal(results)
+	if err != nil {
+		return "", fmt.Errorf("failed to encode results: %v", err)
+	}
+
+	return string(responseJSON), nil
 }
