@@ -10,7 +10,7 @@ export const useChatStore = defineStore('chat', () => {
       		role: 'bot',
 	  		isDefault: true,
       		content:
-        	'您好，我是【臺北城市儀表板】小幫手，很高興為您服務！\n 您可以： \n\n • 點擊左側既有的儀表板主題，快速查看各主題內容 \n • 輸入您感興趣的主題描述，我會自動為您組建最適合的儀表板 \n\n 如果有想了解的內容，歡迎直接告訴我，我會盡力協助！\n\n 📩 聯絡信箱：tuic@gov.taipei \n 🏢 臺北大數據中心 \n\n',
+        	'TEST您好，我是【臺北城市儀表板】小幫手，很高興為您服務！\n 您可以： \n\n • 點擊左側既有的儀表板主題，快速查看各主題內容 \n • 輸入您感興趣的主題描述，我會自動為您組建最適合的儀表板 \n\n 如果有想了解的內容，歡迎直接告訴我，我會盡力協助！\n\n 📩 聯絡信箱：tuic@gov.taipei \n 🏢 臺北大數據中心 \n\n',
     	},
   	];
 
@@ -101,6 +101,51 @@ export const useChatStore = defineStore('chat', () => {
 		saveChatLog(newChatData.content, recommendComponents.value);
   	};
 
+	const chatWithAI = async (newChatData) => {
+		// 1. 先把使用者的話加到畫面
+		chatData.value.push({ id: chatData.value.length + 1, isDefault: false, ...newChatData });
+
+		try {
+			// 2. 準備對話歷史 (過濾掉預設訊息、錯誤訊息、以及組件搜尋的提示語)
+			const messages = chatData.value
+				.filter(m => {
+					// 過濾掉：1. 預設訊息 2. 沒有內容 3. 系統報錯訊息 4. 組件搜尋的推薦語
+					if (m.isDefault || !m.content) return false;
+					if (m.content.includes("抱歉，我現在無法與 AI 取得聯繫")) return false;
+					if (m.content.includes("自動為您推薦的「組件清單」")) return false;
+					if (m.content.includes("提供的描述沒有相似組件")) return false;
+					return true;
+				})
+				.map(m => ({
+					role: m.role === 'bot' ? 'assistant' : 'user',
+					content: m.content
+				}));
+
+			// 3. 呼叫後端 AI 接口
+			const response = await http.post("/ai/chat/twai", {
+				messages: messages,
+				stream: false // 目前先使用非串流模式
+			});
+
+			// 4. 將 AI 回覆加入畫面
+			if (response.data?.status === "success" && response.data.data?.content) {
+				addChatData({ 
+					role: 'bot', 
+					content: response.data.data.content 
+				});
+			} else {
+				throw new Error("AI response format error");
+			}
+
+		} catch (error) {
+			console.error("AI Chat Error:", error);
+			addChatData({ 
+				role: 'bot', 
+				content: "抱歉，我現在無法與 AI 取得聯繫，請稍後再試或檢查後端設定。" 
+			});
+		}
+	};
+
 	const saveChatLog = async(question, answer) => {
 		try {
         	const formData = new FormData();
@@ -124,5 +169,5 @@ export const useChatStore = defineStore('chat', () => {
       	}
 	};
 
-	return { chatData, addChatData, addQueryData, saveChatLog }
+	return { chatData, addChatData, addQueryData, chatWithAI, saveChatLog }
 })
