@@ -13,6 +13,7 @@ import AddViewPoint from "../dialogs/AddViewPoint.vue";
 import MobileLayers from "../dialogs/MobileLayers.vue";
 import IncidentReport from "../dialogs/IncidentReport.vue";
 import FindClosestPoint from "../dialogs/FindClosestPoint.vue";
+import SearchCircleSettings from "../dialogs/SearchCircleSettings.vue";
 import { savedLocations } from "../../assets/configs/mapbox/savedLocations.js";
 
 const authStore = useAuthStore();
@@ -25,19 +26,12 @@ const districtLayer = ref(false);
 const villageLayer = ref(false);
 
 const canUseFindClosestPoint = computed(() => {
-	let pointLayerCount = 0;
-
-	mapStore.currentVisibleLayers.forEach((layer) => {
-		if (["circle", "symbol"].includes(layer.split("-")[1])) {
-			pointLayerCount++;
-		}
-	});
-
-	return pointLayerCount === 1;
+	return mapStore.getSearchCircleLayerIds(mapStore.currentVisibleLayers).length === 1;
 });
 
 function toggleDistrictLayer() {
 	districtLayer.value = !districtLayer.value;
+	mapStore.resetSearchCircle();
 	mapStore.toggleDistrictBoundaries(districtLayer.value);
 	// 載入區界時觸發GA自訂事件
 	gtag('event','map_actions', {
@@ -48,6 +42,7 @@ function toggleDistrictLayer() {
 
 function toggleVillageLayer() {
 	villageLayer.value = !villageLayer.value;
+	mapStore.resetSearchCircle();
 	mapStore.toggleVillageBoundaries(villageLayer.value);
 	// 載入里界時觸發GA自訂事件
 	gtag('event','map_actions', {
@@ -62,6 +57,23 @@ function findClosestPointGA() {
 		action_type: "尋找最近點",
 		time: Date.now(),
   	})
+}
+
+function activateSearchCircleClickMode() {
+	if (mapStore.isSearchCircleEnabled) {
+		mapStore.resetSearchCircle();
+		dialogStore.hideAllDialogs();
+		gtag("event", "map_actions", {
+			action_type: "關閉搜尋圈",
+			time: Date.now(),
+		});
+		return;
+	}
+	dialogStore.showDialog("searchCircleSettings");
+	gtag("event", "map_actions", {
+		action_type: "開啟搜尋圈設定",
+		time: Date.now(),
+	});
 }
 
 watch(
@@ -123,6 +135,19 @@ onMounted(() => {
           近
         </button>
         <button
+          :style="{
+            color: mapStore.isSearchCircleEnabled
+              ? 'var(--color-highlight)'
+              : 'var(--color-component-background)',
+          }"
+          class="hide-if-mobile"
+          title="設定搜尋圈"
+          type="button"
+          @click="activateSearchCircleClickMode"
+        >
+          圈
+        </button>
+        <button
           class="show-if-mobile"
           @click="dialogStore.showDialog('mobileLayers')"
         >
@@ -147,6 +172,7 @@ onMounted(() => {
       <MobileLayers :key="contentStore.currentDashboard.index" />
       <IncidentReport />
       <FindClosestPoint />
+      <SearchCircleSettings />
     </div>
 
     <div class="mapcontainer-controls hide-if-mobile">

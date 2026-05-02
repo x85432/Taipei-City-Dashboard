@@ -575,6 +575,9 @@ function handleClose() {
                   <option value="cctv">
                     cctv (符號圖)
                   </option>
+				   <option value="restaurant">
+                    restaurant (符號圖)
+                  </option>
                 </select>
               </div>
               <label>地圖{{ index + 1 }} Paint屬性</label>

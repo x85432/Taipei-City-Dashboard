@@ -180,6 +180,7 @@ VALUES (
 );
 ```
 
+
 接著新增 `query_charts`。如果要支援臺北市和雙北，要新增兩筆：
 
 ```sql
@@ -362,3 +363,270 @@ map_config_ids = '{103}'
 ```
 
 不要寫 Windows 本機路徑。
+
+
+### 9. RankingOverviewChart 公版排名圖表
+
+`RankingOverviewChart` 是公版的排名總覽元件，可以給不同資料集使用。元件本身不寫死 AQI、飲食碳排、行政區或任何特定領域文案；呈現方式由 `three_d` 查詢結果、`component_charts.levels` 與 `component_charts.ranking_config` 控制。
+
+適合使用情境：
+
+- 行政區、站點、類別、服務、產品等項目排名。
+- 需要摘要卡顯示平均、總和或第一名。
+- 需要點選某一列後，在元件內顯示該項目的排名與平均との差。
+- 可搭配地圖篩選，也可以完全不搭配地圖。
+
+不適合使用情境：
+
+- 一個 `x_axis` 需要同時比較多個系列。
+- 需要時間軸趨勢、堆疊比例或複雜交叉表。
+- 數值不是單一量尺，且不能透過 `unit` 或描述清楚說明。
+
+#### 9.1 資料格式
+
+`query_type` 使用 `three_d`。查詢至少回傳：
+
+```sql
+SELECT
+    item_name AS x_axis,      -- 排名項目，例如行政區、站點、食物分類
+    '指標名稱' AS y_axis,     -- 系列名稱，通常只放一個系列
+    '' AS icon,               -- 保留欄位；RankingOverviewChart 目前不使用 icon
+    ROUND(score)::int AS data -- 排名數值，後端 three_d 目前會掃成 int
+FROM public.some_table
+ORDER BY score DESC, item_name;
+```
+
+欄位規則：
+
+- `x_axis`：排名項目名稱，會出現在排名列與點選後的主卡。
+- `y_axis`：指標名稱，會成為資料系列名稱；公版建議只回傳一個 `y_axis`。
+- `icon`：保留欄位，目前給空字串即可。
+- `data`：整數數值。元件會依 `ranking_config.order` 排序。
+
+如果來源是小數，例如 `2.44`，因為後端 `three_d` 的 `data` 目前是 `int`，建議在 SQL 先放大，再用 `ranking_config.value_divisor` 還原顯示：
+
+```sql
+SELECT
+    category AS x_axis,
+    '每公克碳排' AS y_axis,
+    '' AS icon,
+    ROUND(carbon_gco2e_per_gram * 100)::int AS data
+FROM public.food_carbon_categories;
+```
+
+搭配：
+
+```json
+{
+    "value_precision": 2,
+    "value_divisor": 100
+}
+```
+
+前端會先把 `data / value_divisor`，再依 `value_precision` 顯示，所以 `244` 會顯示成 `2.44`。
+
+#### 9.2 有地圖與無地圖接法
+
+如果排名列要同步篩選地圖，設定 `map_config_ids` 與 `map_filter`：
+
+```sql
+map_config_ids = '{360,361}'
+map_filter = '{"mode":"byParam","byParam":{"xParam":"district"}}'::json
+```
+
+如果元件不需要地圖，例如飲食碳排分類排名，設定：
+
+```sql
+map_config_ids = NULL
+map_filter = NULL
+```
+
+無地圖時，點擊排名列只會更新元件自己的摘要卡，不會影響地圖。
+
+#### 9.3 component_charts 設定
+
+若需要分級顏色與標籤，在 `component_charts` 加上 `levels` JSON；沒有 `levels` 時，元件會退回一般單色排名。若需要調整排序、主卡計算方式與文字，使用 `ranking_config`。
+
+```sql
+ALTER TABLE public.component_charts
+    ADD COLUMN IF NOT EXISTS levels json;
+
+ALTER TABLE public.component_charts
+    ADD COLUMN IF NOT EXISTS ranking_config json;
+
+INSERT INTO public.component_charts (index, color, types, unit, levels, ranking_config)
+VALUES (
+    'your_ranking_component',
+    ARRAY['#56B96D', '#F8CF58', '#F5AD4A', '#F05D5E'],
+    ARRAY['RankingOverviewChart'],
+    '分',
+    '[
+        {"label":"低","fullLabel":"低","min":0,"max":25},
+        {"label":"中","fullLabel":"中","min":26,"max":50},
+        {"label":"高","fullLabel":"高","min":51,"max":75},
+        {"label":"極高","fullLabel":"極高","min":76,"max":100}
+    ]'::json,
+    '{
+        "order": "desc",
+        "primary_metric": "average",
+        "value_precision": 0,
+        "labels": {
+            "primary": "平均分數",
+            "leading": "最高",
+            "average": "平均",
+            "count": "筆數",
+            "countUnit": "項",
+            "rank": "排名",
+            "diff": "平均との差",
+            "listTitle": "分數排名"
+        }
+    }'::json
+);
+```
+
+`levels` 欄位：
+
+- `label`：短標籤，顯示在列尾與圖例。
+- `fullLabel`：完整標籤，顯示在 tooltip。
+- `min` / `max`：分級範圍，會用來決定顏色。
+- 顏色依序取用 `component_charts.color`；也可以在單一 level 裡加 `color` 覆蓋。
+
+`ranking_config` 可用欄位：
+
+- `order`：`desc` 或 `asc`，預設 `desc`。
+- `primary_metric`：主卡未選取項目時顯示 `average`、`sum` 或 `leading`，預設 `average`。
+- `value_precision`：小數位數，預設 `0`。
+- `value_divisor`：顯示前的除數，預設 `1`。用來支援小數資料，例如 SQL 輸出 `244`、設定 `100` 後顯示 `2.44`。
+- `labels.primary`：主卡標題，例如 `平均 AQI`、`總服務量`、`最高分類`。
+- `labels.leading`：第一名摘要標籤，例如 `最高`、`最低`、`最便利`。
+- `labels.average`、`labels.count`、`labels.countUnit`、`labels.rank`、`labels.diff`、`labels.listTitle`：控制元件內固定文案。
+
+#### 9.4 完整範例：空氣品質 AQI
+
+```sql
+INSERT INTO public.component_charts ("index", color, types, unit, levels, ranking_config)
+VALUES (
+    'air_quality_overview',
+    ARRAY['#56B96D', '#F8CF58', '#F5AD4A', '#F05D5E', '#8E63CE', '#8B6A43'],
+    ARRAY['RankingOverviewChart'],
+    'AQI',
+    '[
+        {"label":"良好","fullLabel":"良好","min":0,"max":50},
+        {"label":"普通","fullLabel":"普通","min":51,"max":100},
+        {"label":"敏感族群","fullLabel":"對敏感族群不健康","min":101,"max":150},
+        {"label":"所有族群","fullLabel":"對所有族群不健康","min":151,"max":200},
+        {"label":"非常不健康","fullLabel":"非常不健康","min":201,"max":300},
+        {"label":"危害","fullLabel":"危害","min":301,"max":500}
+    ]'::json,
+    '{
+        "order": "desc",
+        "primary_metric": "average",
+        "value_precision": 0,
+        "labels": {
+            "primary": "平均 AQI",
+            "leading": "最高",
+            "average": "平均",
+            "count": "筆數",
+            "countUnit": "項",
+            "rank": "排名",
+            "diff": "平均差",
+            "listTitle": "AQI 排名"
+        }
+    }'::json
+);
+
+-- query_charts.query_chart
+SELECT
+    district AS x_axis,
+    'AQI' AS y_axis,
+    '' AS icon,
+    ROUND(score)::int AS data
+FROM public.environment_pressure_index
+WHERE pressure_type = '空氣'
+  AND score IS NOT NULL
+ORDER BY city, district;
+```
+
+#### 9.5 完整範例：飲食每公克碳排
+
+```sql
+INSERT INTO public.component_charts ("index", color, types, unit, levels, ranking_config)
+VALUES (
+    'food_carbon_ranking',
+    ARRAY['#56B96D', '#BBD55A', '#F8CF58', '#F5AD4A', '#F05D5E'],
+    ARRAY['RankingOverviewChart'],
+    'gCO2e/g',
+    '[
+        {"label":"低","fullLabel":"低碳排","min":0,"max":1},
+        {"label":"中低","fullLabel":"中低碳排","min":1.01,"max":3},
+        {"label":"中","fullLabel":"中碳排","min":3.01,"max":7},
+        {"label":"高","fullLabel":"高碳排","min":7.01,"max":12},
+        {"label":"極高","fullLabel":"極高碳排","min":12.01,"max":25}
+    ]'::json,
+    '{
+        "order": "desc",
+        "primary_metric": "leading",
+        "value_precision": 2,
+        "value_divisor": 100,
+        "labels": {
+            "primary": "最高分類",
+            "leading": "最高分類",
+            "average": "每克平均",
+            "count": "分類數",
+            "countUnit": "類",
+            "rank": "排名",
+            "diff": "與平均差",
+            "listTitle": "每公克碳排排名"
+        }
+    }'::json
+);
+
+-- query_charts.query_chart
+SELECT
+    category AS x_axis,
+    '每公克碳排' AS y_axis,
+    '' AS icon,
+    ROUND(carbon_gco2e_per_gram * 100)::int AS data
+FROM public.food_carbon_categories
+ORDER BY carbon_gco2e_per_gram DESC, category;
+```
+
+這個範例的來源資料原本同時有 `每公克`、`每毫升`、`每顆`：
+
+- `每公克`：直接沿用來源值。
+- `每毫升`：以 `1 毫升約 1 公克` 換算，適合飲品與水等近似密度資料。
+- `每顆`：以 `1 顆蛋約 60 公克` 換算。
+
+換算假設應保存在資料表欄位或 `long_desc`，避免使用者誤以為所有來源原本就是每公克。
+
+### 10. 本機更新空氣品質資料
+
+`query_charts.update_freq` 只控制前端顯示「每多久更新」，不會自己排程抓資料。本機開發時可先用下列腳本更新 MOENV 空氣品質資料：
+
+```bash
+MOENV_API_KEY=你的環境部APIKEY \
+  python3 dataset-analysis/scripts/update_air_quality_local.py
+```
+
+若本機 Python 憑證驗證失敗，可在開發環境加上 `--no-verify-ssl`：
+
+```bash
+MOENV_API_KEY=你的環境部APIKEY \
+  python3 dataset-analysis/scripts/update_air_quality_local.py --no-verify-ssl
+```
+
+這支腳本會依序：
+
+- 呼叫 `build_moenv_air_quality_csv.py` 抓取 `AQX_P_432` 並篩出雙北。
+- 呼叫 `build_air_quality_assets.py` 產生正規化 CSV、地圖 GeoJSON 與 `dashboard-air-quality.sql`。
+- 呼叫 `build_air_quality_aqi_zones.mjs` 以測站 AQI 做 IDW 插值，依官方 AQI 級距輸出 `environment_air_quality_aqi_zones.geojson` MultiPolygon 面圖。
+- 將 `dashboard-air-quality.sql` 匯入 Docker 的 `postgres-data` container，預設 DB 為 `dashboard`。
+
+若要用已下載的原始 JSON 測試，不打 API：
+
+```bash
+python3 dataset-analysis/scripts/update_air_quality_local.py \
+  --input-json dataset-analysis/eco-friendly/雙北空氣品質原始API資料.json
+```
+
+正式部署時，不建議由後端 API 直接呼叫 MOENV。應將同一套資料流程搬到 `Taipei-City-Dashboard-DE`，建立每小時執行的 Airflow DAG，讓 DAG 更新資料庫與地圖資料來源。

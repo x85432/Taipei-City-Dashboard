@@ -20,7 +20,7 @@ import axios from "axios";
 import http from "../router/axios.js";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { point, distance } from "@turf/turf";
+import { point, distance, circle } from "@turf/turf";
 
 // Other Stores
 import { useAuthStore } from "./authStore";
@@ -82,6 +82,12 @@ export const useMapStore = defineStore("map", {
 		viewPoints: [],
 		marker: null,
 		tempMarkerCoordinates: null,
+		searchCircleMarker: null,
+		isSearchCircleClickMode: false,
+		isSearchCircleActive: false,
+		searchCircleCenter: null,
+		searchCircleRadiusKm: 1.2,
+		searchCircleLayerIds: [],
 		// Store the user's current location,
 		userLocation: { latitude: null, longitude: null },
 		// 3D Mrt Map 相關參數
@@ -96,6 +102,10 @@ export const useMapStore = defineStore("map", {
 			// [layerId]: Date
 		},
 	}),
+	getters: {
+		isSearchCircleEnabled: (state) =>
+			state.isSearchCircleClickMode || state.isSearchCircleActive,
+	},
 	actions: {
 		/* Initialize Mapbox */
 		// 1. Creates the mapbox instance and passes in initial configs
@@ -110,6 +120,8 @@ export const useMapStore = defineStore("map", {
 				style: mapStyle,
 			});
 			this.marker = new mapboxGl.Marker();
+			this.isSearchCircleClickMode = false;
+			this.isSearchCircleActive = false;
 			const geoLocate = new mapboxGl.GeolocateControl({
 				positionOptions: {
 					enableHighAccuracy: true,
@@ -132,6 +144,23 @@ export const useMapStore = defineStore("map", {
 					this.initializeBasicLayers();
 				})
 				.on("click", (event) => {
+					if (this.isSearchCircleClickMode) {
+						this.isSearchCircleClickMode = false;
+						this.drawSearchCircleAndSummarize(
+							event.lngLat.lng,
+							event.lngLat.lat,
+							this.searchCircleRadiusKm,
+						);
+						return;
+					}
+					if (this.isSearchCircleActive) {
+						if (!this.isPointInsideSearchCircle(event.lngLat.lng, event.lngLat.lat)) {
+							this.clearSearchCircle();
+							this.removePopup();
+							this.isSearchCircleClickMode = true;
+							return;
+						}
+					}
 					if (this.popup) {
 						this.popup = null;
 					}
@@ -310,6 +339,7 @@ export const useMapStore = defineStore("map", {
 				"cctv",
 				"live",
 				"youbike_elec",
+				"restaurant_icon",
 			];
 			images.forEach((element) => {
 				this.map.loadImage(
@@ -423,6 +453,7 @@ export const useMapStore = defineStore("map", {
 		/* Adding Map Layers */
 		// 1. Passes in the map_config (an Array of Objects) of a component and adds all layers to the map layer list
 		addToMapLayerList(map_config) {
+			this.resetSearchCircle();
 			map_config.forEach((element) => {
 				let mapLayerId = `${element.index}-${element.type}-${element.city}`;
 				// 1-1. If the layer exists, simply turn on the visibility and add it to the visible layers list
@@ -611,6 +642,11 @@ export const useMapStore = defineStore("map", {
 		addMapLayer(map_config) {
 			let extra_paint_configs = {};
 			let extra_layout_configs = {};
+			const paintConfig = { ...map_config.paint };
+			if (paintConfig["filter-disabled"]) {
+				map_config.filter_disabled = true;
+				delete paintConfig["filter-disabled"];
+			}
 			if (map_config.icon) {
 				extra_paint_configs = {
 					...maplayerCommonPaint[
@@ -654,7 +690,7 @@ export const useMapStore = defineStore("map", {
 				paint: {
 					...maplayerCommonPaint[`${map_config.type}`],
 					...extra_paint_configs,
-					...map_config.paint,
+					...paintConfig,
 				},
 				layout: {
 					...maplayerCommonLayout[`${map_config.type}`],
@@ -969,6 +1005,10 @@ export const useMapStore = defineStore("map", {
 			const min = map_config.paint?.["isoline-min"] || 0;
 			const max = map_config.paint?.["isoline-max"] || 100;
 			const step = map_config.paint?.["isoline-step"] || 2;
+			const filterDisabled =
+				map_config.filter_disabled ||
+				map_config.paint?.["filter-disabled"];
+			map_config.filter_disabled = filterDisabled;
 
 			// - Repeat the marching square algorithm for differnt iso-values (40, 42, 44 ... 74 in this case)
 			for (let isoValue = min; isoValue <= max; isoValue += step) {
@@ -1005,11 +1045,13 @@ export const useMapStore = defineStore("map", {
 			delete map_config.paint?.["isoline-min"];
 			delete map_config.paint?.["isoline-max"];
 			delete map_config.paint?.["isoline-step"];
+			delete map_config.paint?.["filter-disabled"];
 
 			let new_map_config = {
 				...map_config,
 				type: "line",
 				source: "geojson",
+				filter_disabled: filterDisabled,
 			};
 			this.addMapLayer(new_map_config);
 		},
@@ -1846,6 +1888,7 @@ export const useMapStore = defineStore("map", {
 		},
 		// 6. Turn off the visibility of an exisiting map layer but don't remove it completely
 		turnOffMapLayerVisibility(map_config) {
+			this.resetSearchCircle();
 			this.stopAnimation();
 			map_config.forEach((element) => {
 				let mapLayerId = `${element.index}-${element.type}-${element.city}`;
@@ -2319,8 +2362,15 @@ export const useMapStore = defineStore("map", {
 			if (!this.map || dialogStore.dialogs.moreInfo) {
 				return;
 			}
+			this.resetSearchCircle();
 			map_configs.map((map_config) => {
 				let mapLayerId = `${map_config.index}-${map_config.type}-${map_config.city}`;
+				if (
+					map_config.filter_disabled ||
+					map_config.paint?.["filter-disabled"]
+				) {
+					return;
+				}
 				if (map_config && map_config.type === "arc") {
 					this.deckGlLayer[mapLayerId].config.data = this.deckGlLayer[
 						mapLayerId
@@ -2391,6 +2441,7 @@ export const useMapStore = defineStore("map", {
 			if (!this.map || dialogStore.dialogs.moreInfo) {
 				return;
 			}
+			this.resetSearchCircle();
 			map_configs.map((map_config) => {
 				let mapLayerId = `${map_config.index}-${map_config.type}-${map_config.city}`;
 				if (map_config.title !== xParam) {
@@ -2414,8 +2465,15 @@ export const useMapStore = defineStore("map", {
 			if (!this.map || dialogStore.dialogs.moreInfo) {
 				return;
 			}
+			this.resetSearchCircle();
 			map_configs.map((map_config) => {
 				let mapLayerId = `${map_config.index}-${map_config.type}-${map_config.city}`;
+				if (
+					map_config.filter_disabled ||
+					map_config.paint?.["filter-disabled"]
+				) {
+					return;
+				}
 				if (map_config && map_config.type === "arc") {
 					this.deckGlLayer[mapLayerId].config.data =
 						this.deckGlLayer[mapLayerId].data;
@@ -2431,6 +2489,7 @@ export const useMapStore = defineStore("map", {
 			if (!this.map || dialogStore.dialogs.moreInfo) {
 				return;
 			}
+			this.resetSearchCircle();
 			map_configs.map((map_config) => {
 				let mapLayerId = `${map_config.index}-${map_config.type}-${map_config.city}`;
 				this.map.setLayoutProperty(mapLayerId, "visibility", "visible");
@@ -2500,37 +2559,32 @@ export const useMapStore = defineStore("map", {
 			if (this.loadingLayers.length !== 0) return;
 			this.loadingLayers.push("rendering");
 
-			let targetLayer = -1;
-			this.currentVisibleLayers.forEach((layer, index) => {
-				if (["circle", "symbol"].includes(layer.split("-")[1])) {
-					targetLayer = index;
-				}
-			});
+			const pointLayerIds = this.getSearchCircleLayerIds(
+				this.currentVisibleLayers,
+			);
+			const targetLayerId = pointLayerIds[pointLayerIds.length - 1];
 
-			if (targetLayer === -1) {
+			if (!targetLayerId) {
 				this.loadingLayers.pop();
 				return;
 			}
 
 			this.removePopup();
-			const layerSourceType =
-				this.mapConfigs[this.currentVisibleLayers[targetLayer]].source;
+			const layerSourceType = this.mapConfigs[targetLayerId].source;
 
 			const features = [];
 
 			if (layerSourceType === "geojson") {
 				features.push(
-					...this.map.getSource(
-						`${this.currentVisibleLayers[targetLayer]}-source`,
-					)._data.features,
+					...this.map.getSource(`${targetLayerId}-source`)._data
+						.features,
 				);
 			} else {
 				const res = await axios.get(
 					`${
 						location.origin
 					}/geo_server/taipei_vioc/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=taipei_vioc%3A${
-						this.mapConfigs[this.currentVisibleLayers[targetLayer]]
-							.index
+						this.mapConfigs[targetLayerId].index
 					}&maxFeatures=1000000&outputFormat=application%2Fjson`,
 				);
 
@@ -2561,10 +2615,517 @@ export const useMapStore = defineStore("map", {
 
 			this.flyToLocation(res.geometry.coordinates);
 		},
+		async fetchPointLayerFeatures(layerId) {
+			const config = this.mapConfigs[layerId];
+			if (!config) return [];
+
+			if (config.source === "geojson") {
+				return (
+					this.map.getSource(`${layerId}-source`)?._data?.features || []
+				);
+			}
+
+			const res = await axios.get(
+				`${location.origin}/geo_server/taipei_vioc/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=taipei_vioc%3A${config.index}&maxFeatures=1000000&outputFormat=application%2Fjson`,
+			);
+			return res.data?.features || [];
+		},
+		getSearchCircleLayerIds(layerIds = []) {
+			const selectedLayerIds = layerIds.length
+				? layerIds
+				: this.currentVisibleLayers;
+
+			return selectedLayerIds.filter((layerId) => {
+				const layerType = this.getMapLayerType(layerId);
+				return (
+					["circle", "symbol"].includes(layerType) &&
+					this.currentVisibleLayers.includes(layerId)
+				);
+			});
+		},
+		getMapLayerType(layerId) {
+			if (this.mapConfigs[layerId]?.type) {
+				return this.mapConfigs[layerId].type;
+			}
+
+			const parts = layerId.split("-");
+			return parts.length >= 3 ? parts[parts.length - 2] : "";
+		},
+		getSearchCircleColor(index) {
+			const colors = [
+				"#5a9cf8",
+				"#3CB371",
+				"#F8CF58",
+				"#D66BA0",
+				"#F59E42",
+				"#9B7EDE",
+				"#8B4513",
+				"#64D2C8",
+			];
+			return colors[index % colors.length];
+		},
+		getSearchCirclePaint(config) {
+			if (!config?.paint) return {};
+			if (typeof config.paint !== "string") return config.paint;
+
+			try {
+				return JSON.parse(config.paint);
+			} catch (e) {
+				console.warn("Failed to parse map paint config", e);
+				return {};
+			}
+		},
+		parseSearchCircleMatchExpression(expression) {
+			if (!Array.isArray(expression) || expression[0] !== "match") return null;
+
+			const getter = expression[1];
+			if (!Array.isArray(getter) || getter[0] !== "get" || !getter[1]) {
+				return null;
+			}
+
+			const categories = [];
+			for (let i = 2; i < expression.length - 1; i += 2) {
+				const values = Array.isArray(expression[i])
+					? expression[i]
+					: [expression[i]];
+				const color =
+					typeof expression[i + 1] === "string" ? expression[i + 1] : null;
+
+				values.forEach((value) => {
+					if (value === undefined || value === null) return;
+					categories.push({
+						value: `${value}`.trim(),
+						color,
+					});
+				});
+			}
+
+			return {
+				key: getter[1],
+				categories: categories.filter((category) => category.value !== ""),
+			};
+		},
+		getSearchCircleStyledCategory(config) {
+			const paint = this.getSearchCirclePaint(config);
+			const candidateExpressions = [
+				paint["circle-color"],
+				paint["icon-color"],
+				paint["text-color"],
+			];
+
+			for (const expression of candidateExpressions) {
+				const category = this.parseSearchCircleMatchExpression(expression);
+				if (category?.key && category.categories.length) return category;
+			}
+
+			return null;
+		},
+		getSearchCircleFallbackCategory(features) {
+			const candidateKeys = [
+				"category",
+				"service_type",
+				"primary_action",
+				"type",
+				"service_status",
+				"vehicle_type",
+				"cycling_type",
+				"類別",
+				"機構類型",
+			];
+
+			for (const key of candidateKeys) {
+				const values = new Set(
+					features
+						.map((feature) => feature.properties?.[key])
+						.filter(
+							(value) =>
+								value !== undefined &&
+								value !== null &&
+								`${value}`.trim() !== "",
+						)
+						.map((value) => `${value}`.trim()),
+				);
+
+				if (values.size > 1 && values.size <= 30) {
+					return {
+						key,
+						categories: [...values].map((value) => ({ value, color: null })),
+					};
+				}
+			}
+
+			return null;
+		},
+		getSearchCircleCategory(features, config) {
+			return (
+				this.getSearchCircleStyledCategory(config) ||
+				this.getSearchCircleFallbackCategory(features)
+			);
+		},
+		buildGenericSearchCircleSummary(featuresByLayer) {
+			const summaryMap = new Map();
+			const hasMultipleLayers = featuresByLayer.length > 1;
+
+			const addSummaryItem = (key, label, color) => {
+				if (summaryMap.has(key)) return;
+				summaryMap.set(key, {
+					key,
+					label,
+					unit: "個",
+					count: 0,
+					color: color || this.getSearchCircleColor(summaryMap.size),
+				});
+			};
+
+			featuresByLayer.forEach((layer) => {
+				const category = this.getSearchCircleCategory(
+					layer.features,
+					layer.config,
+				);
+
+				if (!category) {
+					const key = `layer:${layer.layerId}`;
+					addSummaryItem(key, layer.title, null);
+					summaryMap.get(key).count = layer.features.length;
+					layer.features.forEach((feature) => {
+						feature.properties.__searchSummaryKey = key;
+					});
+					return;
+				}
+
+				category.categories.forEach(({ value, color }) => {
+					const key = hasMultipleLayers
+						? `${layer.layerId}:${value}`
+						: value;
+					const label = hasMultipleLayers ? `${layer.title}：${value}` : value;
+					addSummaryItem(key, label, color);
+				});
+
+				layer.features.forEach((feature) => {
+					const rawValue =
+						`${feature.properties?.[category.key] || "未分類"}`.trim() ||
+						"未分類";
+					const key = hasMultipleLayers
+						? `${layer.layerId}:${rawValue}`
+						: rawValue;
+					const label = hasMultipleLayers
+						? `${layer.title}：${rawValue}`
+						: rawValue;
+
+					addSummaryItem(key, label, null);
+					summaryMap.get(key).count += 1;
+					feature.properties.__searchSummaryKey = key;
+				});
+			});
+
+			return [...summaryMap.values()];
+		},
+		// 4. Draw a search circle and summarize selected point layers inside it
+		async drawSearchCircleAndSummarize(lng, lat, radiusKm = 1.2) {
+			if (!this.map) return;
+			if (this.loadingLayers.length !== 0) return;
+
+			const dialogStore = useDialogStore();
+			const center = [Number(lng), Number(lat)];
+			if (!Number.isFinite(center[0]) || !Number.isFinite(center[1])) {
+				dialogStore.showNotification("fail", "座標格式錯誤");
+				return;
+			}
+
+			const selectedPointLayerIds = this.getSearchCircleLayerIds(
+				this.searchCircleLayerIds,
+			);
+			if (selectedPointLayerIds.length === 0) {
+				this.resetSearchCircle();
+				dialogStore.showNotification("fail", "請先開啟至少一個點位圖層");
+				return;
+			}
+
+			this.clearSearchCircle();
+			this.removePopup();
+
+			const searchCircle = circle(center, radiusKm, {
+				steps: 96,
+				units: "kilometers",
+			});
+
+			this.map.addSource("walk-search-circle-source", {
+				type: "geojson",
+				data: searchCircle,
+			});
+			this.searchCircleCenter = center;
+			this.map.addLayer({
+				id: "walk-search-circle-fill",
+				type: "fill",
+				source: "walk-search-circle-source",
+				paint: {
+					"fill-color": "#5a9cf8",
+					"fill-opacity": 0.16,
+				},
+			});
+			this.map.addLayer({
+				id: "walk-search-circle-line",
+				type: "line",
+				source: "walk-search-circle-source",
+				paint: {
+					"line-color": "#5a9cf8",
+					"line-width": 2,
+					"line-dasharray": [2, 1.5],
+				},
+			});
+			this.searchCircleMarker = new mapboxGl.Marker({ color: "#5a9cf8" })
+				.setLngLat(center)
+				.addTo(this.map);
+
+			const centerPoint = point(center);
+			const isFeatureInsideCircle = (feature) => {
+				if (feature.geometry?.type !== "Point") return false;
+				const [featureLng, featureLat] = feature.geometry.coordinates;
+				const featureCoordinate = [Number(featureLng), Number(featureLat)];
+				if (
+					!Number.isFinite(featureCoordinate[0]) ||
+					!Number.isFinite(featureCoordinate[1])
+				) {
+					return false;
+				}
+				return (
+					distance(centerPoint, point(featureCoordinate), {
+						units: "kilometers",
+					}) <= radiusKm
+				);
+			};
+
+			const featuresByLayer = [];
+			let renderedFeatures = [];
+			let summaryItems = [];
+			let title = "搜尋圈統計";
+			let description = `半徑 ${radiusKm} 公里，圈內共`;
+
+			for (const [layerIndex, layerId] of selectedPointLayerIds.entries()) {
+				const config = this.mapConfigs[layerId];
+				try {
+					const features = (await this.fetchPointLayerFeatures(layerId))
+						.filter(isFeatureInsideCircle)
+						.map((feature) => ({
+							...feature,
+							properties: {
+								...feature.properties,
+								__searchColor: this.getSearchCircleColor(layerIndex),
+								__searchLayerTitle:
+									config?.title || config?.index || layerId,
+							},
+						}));
+
+					featuresByLayer.push({
+						layerId,
+						title: config?.title || config?.index || layerId,
+						config,
+						features,
+					});
+					renderedFeatures.push(...features);
+				} catch (e) {
+					console.error(`Failed to load search circle layer ${layerId}`, e);
+				}
+			}
+			summaryItems = this.buildGenericSearchCircleSummary(featuresByLayer);
+			title =
+				selectedPointLayerIds.length === 1
+					? `${featuresByLayer[0]?.title || "組件"} 搜尋圈`
+					: "多組件搜尋圈";
+
+			const totalCount = renderedFeatures.length;
+			const summaryColorMap = summaryItems.reduce((result, item) => {
+				result[item.key] = item.color;
+				return result;
+			}, {});
+			renderedFeatures = renderedFeatures.map((feature) => {
+				return {
+					...feature,
+					properties: {
+						...feature.properties,
+						__searchColor:
+							summaryColorMap[feature.properties?.__searchSummaryKey] ||
+							summaryColorMap[feature.properties?.__searchLayerTitle] ||
+							feature.properties?.__searchColor ||
+							"#5a9cf8",
+					},
+				};
+			});
+
+			this.map.addSource("walk-search-circle-points-source", {
+				type: "geojson",
+				data: {
+					type: "FeatureCollection",
+					features: renderedFeatures,
+				},
+			});
+			// Outer glow aura — diffuse halo behind the ring
+			this.map.addLayer({
+				id: "walk-search-circle-points-halo",
+				type: "circle",
+				source: "walk-search-circle-points-source",
+				paint: {
+					"circle-radius": [
+						"interpolate",
+						["linear"],
+						["zoom"],
+						12,
+						14,
+						16,
+						22,
+					],
+					"circle-color": ["coalesce", ["get", "__searchColor"], "#39ff88"],
+					"circle-opacity": 0.28,
+					"circle-blur": 0.75,
+					"circle-stroke-width": 0,
+				},
+			});
+			// Neon ring — transparent fill, crisp fluorescent stroke
+			this.map.addLayer({
+				id: "walk-search-circle-points-ring",
+				type: "circle",
+				source: "walk-search-circle-points-source",
+				paint: {
+					"circle-radius": [
+						"interpolate",
+						["linear"],
+						["zoom"],
+						12,
+						9,
+						16,
+						14,
+					],
+					"circle-color": "#000000",
+					"circle-opacity": 0,
+					"circle-stroke-color": ["coalesce", ["get", "__searchColor"], "#39ff88"],
+					"circle-stroke-width": 2.5,
+					"circle-stroke-opacity": 1,
+				},
+			});
+			// Invisible placeholder — keeps resetSearchCircle cleanup intact
+			this.map.addLayer({
+				id: "walk-search-circle-points",
+				type: "circle",
+				source: "walk-search-circle-points-source",
+				paint: {
+					"circle-radius": 0,
+					"circle-opacity": 0,
+					"circle-stroke-width": 0,
+				},
+			});
+			this.isSearchCircleActive = true;
+
+			const summaryHtml = summaryItems
+				.length
+				? summaryItems
+					.map(
+						(item) =>
+							`<li><span style="display:inline-block;width:10px;height:10px;border-radius:999px;background:${item.color};margin-right:6px;"></span>${item.label}：<strong>${item.count}</strong> ${item.unit}</li>`,
+					)
+					.join("")
+				: "<li>圈內沒有可統計的點位</li>";
+
+			this.popup = new mapboxGl.Popup({ closeButton: true })
+				.setLngLat(center)
+				.setHTML(
+					`<div class="walk-search-popup">
+						<strong>${title}</strong>
+						<p>${description} ${totalCount} 個點位。</p>
+						<ul>${summaryHtml}</ul>
+					</div>`,
+				)
+				.addTo(this.map);
+
+			this.map.easeTo({
+				center,
+				zoom: Math.max(this.map.getZoom(), 14),
+				duration: 1000,
+			});
+		},
+		enableSearchCircleClickMode(options = {}) {
+			const dialogStore = useDialogStore();
+			const radiusKm = Number(options.radiusKm || this.searchCircleRadiusKm);
+			if (!Number.isFinite(radiusKm) || radiusKm <= 0) {
+				dialogStore.showNotification("fail", "請輸入大於 0 的搜尋半徑");
+				return;
+			}
+			if (
+				this.getSearchCircleLayerIds(options.layerIds || this.currentVisibleLayers)
+					.length === 0
+			) {
+				dialogStore.showNotification("fail", "請先開啟至少一個點位圖層");
+				return;
+			}
+			this.searchCircleRadiusKm = radiusKm;
+			this.searchCircleLayerIds = [];
+			this.isSearchCircleClickMode = true;
+			dialogStore.showNotification(
+				"info",
+				`請直接點擊地圖，建立 ${radiusKm} 公里搜尋圈`,
+				6000,
+			);
+		},
+		cancelSearchCircleClickMode() {
+			this.isSearchCircleClickMode = false;
+		},
+		isPointInsideSearchCircle(lng, lat) {
+			if (!this.searchCircleCenter || !this.searchCircleRadiusKm) return false;
+			const target = [Number(lng), Number(lat)];
+			if (
+				!Number.isFinite(target[0]) ||
+				!Number.isFinite(target[1])
+			) {
+				return false;
+			}
+
+			return (
+				distance(point(this.searchCircleCenter), point(target), {
+					units: "kilometers",
+				}) <= this.searchCircleRadiusKm
+			);
+		},
+		clearSearchCircle() {
+			if (!this.map) return;
+			if (this.map.getLayer("walk-search-circle-points")) {
+				this.map.removeLayer("walk-search-circle-points");
+			}
+			if (this.map.getLayer("walk-search-circle-points-ring")) {
+				this.map.removeLayer("walk-search-circle-points-ring");
+			}
+			if (this.map.getLayer("walk-search-circle-points-halo")) {
+				this.map.removeLayer("walk-search-circle-points-halo");
+			}
+			if (this.map.getLayer("walk-search-circle-fill")) {
+				this.map.removeLayer("walk-search-circle-fill");
+			}
+			if (this.map.getLayer("walk-search-circle-line")) {
+				this.map.removeLayer("walk-search-circle-line");
+			}
+			if (this.map.getSource("walk-search-circle-source")) {
+				this.map.removeSource("walk-search-circle-source");
+			}
+			if (this.map.getSource("walk-search-circle-points-source")) {
+				this.map.removeSource("walk-search-circle-points-source");
+			}
+			if (this.searchCircleMarker) {
+				this.searchCircleMarker.remove();
+				this.searchCircleMarker = null;
+			}
+			this.isSearchCircleActive = false;
+			this.searchCircleCenter = null;
+			this.searchCircleLayerIds = [];
+		},
+		resetSearchCircle() {
+			this.cancelSearchCircleClickMode();
+			this.clearSearchCircle();
+			this.removePopup();
+		},
 
 		/* Clearing the map */
 		// 1. Called when the user is switching between maps
 		clearOnlyLayers() {
+			this.cancelSearchCircleClickMode();
+			this.clearSearchCircle();
 			this.currentLayers.forEach((element) => {
 				this.map.removeLayer(element);
 				if (this.map.getSource(`${element}-source`)) {
@@ -2578,6 +3139,8 @@ export const useMapStore = defineStore("map", {
 		},
 		// 2. Called when user navigates away from the map
 		clearEntireMap() {
+			this.cancelSearchCircleClickMode();
+			this.clearSearchCircle();
 			this.currentLayers = [];
 			this.mapConfigs = {};
 			this.map = null;

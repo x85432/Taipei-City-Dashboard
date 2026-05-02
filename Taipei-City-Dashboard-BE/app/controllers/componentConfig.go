@@ -239,7 +239,15 @@ func UpdateComponentChartConfig(c *gin.Context) {
 	}
 
 	// 4. Update the chart config. Then update the update_time in components table.
-	chartConfig, err = models.UpdateComponentChartConfig(component.Index, chartConfig.Color, chartConfig.Types, chartConfig.Unit)
+	chartConfig, err = models.UpdateComponentChartConfig(
+		component.Index,
+		chartConfig.Color,
+		chartConfig.Types,
+		chartConfig.Unit,
+		chartConfig.Levels,
+		chartConfig.RankingConfig,
+		chartConfig.TimelineConfig,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return

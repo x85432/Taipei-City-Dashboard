@@ -96,10 +96,13 @@ type ComponentMap struct {
 
 // ComponentChart is the model for the component_charts table.
 type ComponentChart struct {
-	Index string         `json:"index"      gorm:"column:index;type:varchar;primaryKey"     `
-	Color pq.StringArray `json:"color" gorm:"column:color;type:varchar[]"`
-	Types pq.StringArray `json:"types" gorm:"column:types;type:varchar[]"`
-	Unit  string         `json:"unit" gorm:"column:unit;type:varchar"`
+	Index          string           `json:"index"          gorm:"column:index;type:varchar;primaryKey"`
+	Color          pq.StringArray   `json:"color"          gorm:"column:color;type:varchar[]"`
+	Types          pq.StringArray   `json:"types"          gorm:"column:types;type:varchar[]"`
+	Unit           string           `json:"unit"           gorm:"column:unit;type:varchar"`
+	Levels         *json.RawMessage `json:"levels"         gorm:"column:levels;type:json"`
+	RankingConfig  *json.RawMessage `json:"ranking_config" gorm:"column:ranking_config;type:json"`
+	TimelineConfig *json.RawMessage `json:"timeline_config" gorm:"column:timeline_config;type:json"`
 }
 
 // QuertChartAndConponentForQdrant defines the structure for query_charts&component data fetched for Qdrant.
@@ -492,8 +495,23 @@ func UpdateComponent(id int, city string, name string, historyConfig json.RawMes
 	return cityComponent, nil
 }
 
-func UpdateComponentChartConfig(index string, color pq.StringArray, types pq.StringArray, unit string) (chartConfig ComponentChart, err error) {
-	chartConfig = ComponentChart{Color: color, Types: types, Unit: unit}
+func UpdateComponentChartConfig(
+	index string,
+	color pq.StringArray,
+	types pq.StringArray,
+	unit string,
+	levels *json.RawMessage,
+	rankingConfig *json.RawMessage,
+	timelineConfig *json.RawMessage,
+) (chartConfig ComponentChart, err error) {
+	chartConfig = ComponentChart{
+		Color:          color,
+		Types:          types,
+		Unit:           unit,
+		Levels:         levels,
+		RankingConfig:  rankingConfig,
+		TimelineConfig: timelineConfig,
+	}
 
 	err = DBManager.Table("component_charts").Where("index = ?", index).Updates(&chartConfig).Error
 	if err != nil {

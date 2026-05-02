@@ -1,0 +1,4 @@
+docker-compose -f docker-compose-db.yaml up -d
+docker-compose -f docker-compose-init.yaml up -d
+docker-compose up -d
+http://localhost:8080/

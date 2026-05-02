@@ -15905,11 +15905,19 @@ CREATE TRIGGER tran_ubike_realtime_new_tpe_mtime BEFORE INSERT OR UPDATE ON publ
 -- Name: dashboard-senior-service.sql; Type: SCRIPT INCLUDE; Schema: -; Owner: -
 --
 
+\i /opt/db-sample-data/dashboard-resource-recycling.sql
 \i /opt/db-sample-data/dashboard-senior-service.sql
-\i /opt/db-sample-data/dashboard-medical-garbage.sql
-
+\i /opt/db-sample-data/dashboard-eco-restaurant.sql
+\i /opt/db-sample-data/dashboard-newtaipei-eco-restaurant.sql
+\i /opt/db-sample-data/dashboard-garbage-truck.sql
+\i /opt/db-sample-data/dashboard-clothing-recycle-bins.sql
+\i /opt/db-sample-data/dashboard-newtaipei-clothing-recycle-points.sql
+\i /opt/db-sample-data/dashboard-air-quality.sql
+\i /opt/db-sample-data/dashboard-recycling.sql
+\i /opt/db-sample-data/dashboard-waste.sql
+\i /opt/db-sample-data/dashboard-food-carbon.sql
+\i /opt/db-sample-data/dashboard-green-store.sql
 
 --
 -- PostgreSQL database dump complete
 --
-

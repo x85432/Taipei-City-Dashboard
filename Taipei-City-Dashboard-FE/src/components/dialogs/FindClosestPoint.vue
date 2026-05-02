@@ -45,7 +45,7 @@ function handleClose() {
 function handleFind() {
 	mapStore.flyToClosestLocationAndTriggerPopup(
 		availableLocations.value[+selectedLocation.value].longitude,
-		availableLocations.value[+selectedLocation.value].latitude
+		availableLocations.value[+selectedLocation.value].latitude,
 	);
 	handleClose();
 }

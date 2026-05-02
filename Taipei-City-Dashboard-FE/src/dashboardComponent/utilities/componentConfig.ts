@@ -21,6 +21,7 @@ export type ChartConfig = {
 	types: string[];
 	unit: string | null;
 	categories: string[] | null;
+	timeline_config: TimelineConfig | null;
 };
 
 export type MapConfig = {
@@ -46,3 +47,12 @@ export type HistoryConfig = {
 	color: string[] | null;
 	range: string[];
 };
+
+export type TimelineConfig = {
+	enabled: boolean;
+	granularity?: "year" | "month" | "auto";
+	field?: string;
+	timeField?: string;
+	nameDelimiter?: string | string[];
+	sort?: "asc" | "desc" | null;
+} | boolean;

@@ -76,9 +76,10 @@ Taipei-City-Dashboard-DE/docker/prod/.env
 
 # Local documentation and dataset exports
 Taipei-City-Dashboard-Documentation/
-/*.csv
+*.csv
 Taipei-City-Dashboard-DE/dags/test/
-Taipei-City-Dashboard-FE/src/assets/configs/mapbox/mapConfig.js
+# Taipei-City-Dashboard-FE/src/assets/configs/mapbox/mapConfig.js
 
 spec.md
 /scripts
+/資料處理

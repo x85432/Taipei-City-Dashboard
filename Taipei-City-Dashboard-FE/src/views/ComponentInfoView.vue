@@ -207,34 +207,36 @@ onMounted(() => {
           >
             <h3>協作者</h3>
             <div>
-              <div
+              <template
                 v-for="contributor in item
                   .contributors"
                 :key="contributor"
               >
-                <a
-                  :href="contentStore.contributors[contributor]?.link"
-                  target="_blank"
-                  rel="noreferrer"
-                ><img
-                   :src="
-                     contentStore.contributors[
-                       contributor
-                     ]?.image.includes('http')
-                       ? contentStore.contributors[contributor]
-                         .image
-                       : `/images/contributors/${contentStore.contributors[contributor].image}`
-                   "
-                   :alt="`協作者-${contentStore.contributors[contributor].user_name}`"
-                 >
-                  <p>
-                    {{
-                      contentStore.contributors[contributor]
-                        .user_name
-                    }}
-                  </p>
-                </a>
-              </div>
+                <div v-if="contentStore.contributors[contributor]">
+                  <a
+                    :href="contentStore.contributors[contributor]?.link"
+                    target="_blank"
+                    rel="noreferrer"
+                  ><img
+                     :src="
+                       contentStore.contributors[
+                         contributor
+                       ]?.image?.includes('http')
+                         ? contentStore.contributors[contributor]
+                           .image
+                         : `/images/contributors/${contentStore.contributors[contributor]?.image}`
+                     "
+                     :alt="`協作者-${contentStore.contributors[contributor]?.user_name}`"
+                   >
+                    <p>
+                      {{
+                        contentStore.contributors[contributor]
+                          ?.user_name
+                      }}
+                    </p>
+                  </a>
+                </div>
+              </template>
             </div>
           </div>
         </div>

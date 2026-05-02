@@ -1,7 +1,7 @@
 <!-- Developed by Taipei Urban Intelligence Center 2023-2024-->
 
 <script setup>
-import { ref } from "vue";
+import { computed } from "vue";
 import VueApexCharts from "vue3-apexcharts";
 
 const props = defineProps(["chart_config", "activeChart", "series"]);
@@ -14,7 +14,42 @@ const props = defineProps(["chart_config", "activeChart", "series"]);
 // 	"fly"
 // ]);
 
-const chartOptions = ref({
+function getPointCategory(point, index) {
+	if (point && typeof point === "object") {
+		return point.x ?? point.name ?? props.chart_config.categories?.[index];
+	}
+	return props.chart_config.categories?.[index];
+}
+
+function getPointValue(point) {
+	if (point && typeof point === "object") {
+		const value = point.y ?? point.data ?? point.value;
+		const number = Number(value);
+		return Number.isFinite(number) ? number : null;
+	}
+	const number = Number(point);
+	return Number.isFinite(number) ? number : null;
+}
+
+const radarCategories = computed(() => {
+	const firstSeries = props.series?.find((item) => Array.isArray(item?.data));
+	const pointCategories = firstSeries?.data
+		?.map(getPointCategory)
+		.filter((category) => category !== undefined && category !== null);
+
+	return pointCategories?.length
+		? pointCategories
+		: props.chart_config.categories || [];
+});
+
+const radarSeries = computed(() =>
+	(props.series || []).map((item) => ({
+		...item,
+		data: Array.isArray(item?.data) ? item.data.map(getPointValue) : [],
+	})),
+);
+
+const chartOptions = computed(() => ({
 	chart: {
 		stacked: true,
 		toolbar: {
@@ -26,7 +61,7 @@ const chartOptions = ref({
 		show: false,
 	},
 	legend: {
-		show: props.chart_config.categories ? true : false,
+		show: radarCategories.value.length > 0,
 	},
 	markers: {
 		size: 3,
@@ -57,7 +92,7 @@ const chartOptions = ref({
 				"<h6>" +
 				w.globals.labels[dataPointIndex] +
 				`${
-					props.chart_config.categories
+					radarCategories.value.length > 0
 						? "-" + w.globals.seriesNames[seriesIndex]
 						: ""
 				}` +
@@ -71,13 +106,12 @@ const chartOptions = ref({
 		},
 	},
 	xaxis: {
-		categories: props.chart_config.categories
-			? props.chart_config.categories
-			: [],
+		categories: radarCategories.value,
 		labels: {
 			offsetY: 5,
 			formatter: function (value) {
-				return value.length > 7 ? value.slice(0, 6) + "..." : value;
+				const label = String(value ?? "");
+				return label.length > 7 ? label.slice(0, 6) + "..." : label;
 			},
 		},
 		type: "category",
@@ -91,15 +125,16 @@ const chartOptions = ref({
 				return "";
 			},
 		},
-		// To fix a bug when there is more than 1 series
-		// Orginal behavior: max will default to the max sum of each series
+		// To fix a bug when there is more than 1 series.
+		// Original behavior: max defaults to the max sum of each series.
 		max: function (max) {
-			if (!props.chart_config.categories) {
+			if (!radarCategories.value.length) {
 				return max;
 			}
 			let adjustedMax = 0;
-			props.series.forEach((element) => {
-				const maxOfSeries = Math.max.apply(null, element.data);
+			radarSeries.value.forEach((element) => {
+				const values = element.data.filter((value) => Number.isFinite(value));
+				const maxOfSeries = Math.max(0, ...values);
 				if (maxOfSeries > adjustedMax) {
 					adjustedMax = maxOfSeries;
 				}
@@ -107,7 +142,7 @@ const chartOptions = ref({
 			return adjustedMax * 1.1;
 		},
 	},
-});
+}));
 </script>
 
 <template>
@@ -117,7 +152,7 @@ const chartOptions = ref({
       height="270px"
       type="radar"
       :options="chartOptions"
-      :series="series"
+      :series="radarSeries"
     />
   </div>
 </template>

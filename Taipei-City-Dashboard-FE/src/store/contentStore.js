@@ -787,6 +787,11 @@ export const useContentStore = defineStore("content", {
 
 						this.allMapLayers[index].chart_data =
 							response.data.data;
+
+						if (response.data.categories) {
+							this.allMapLayers[index].chart_config.categories =
+								response.data.categories;
+						}
 					} catch (error) {
 						console.error(
 							`Failed to fetch data for component ${component.id}:`,
