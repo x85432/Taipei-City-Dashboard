@@ -10,11 +10,13 @@ Testing: Jack Huang (Data Scientist), Ian Huang (Data Analysis Intern)
 
 <script setup>
 /* global gtag */
+import { computed, ref } from "vue";
 import DashboardComponent from "../dashboardComponent/DashboardComponent.vue";
 import router from "../router";
 import { useContentStore } from "../store/contentStore";
 import { useDialogStore } from "../store/dialogStore";
 import { useAuthStore } from "../store/authStore";
+import { useChatStore } from "../store/chatStore";
 
 import MoreInfo from "../components/dialogs/MoreInfo.vue";
 import ReportIssue from "../components/dialogs/ReportIssue.vue";
@@ -22,6 +24,47 @@ import ReportIssue from "../components/dialogs/ReportIssue.vue";
 const contentStore = useContentStore();
 const dialogStore = useDialogStore();
 const authStore = useAuthStore();
+const chatStore = useChatStore();
+const aiInsightComponents = ref([]);
+
+const aiInsightComponentKeys = computed(() =>
+	new Set(aiInsightComponents.value.map((item) => `${item.id}-${item.city}`))
+);
+
+function toggleAiInsight(item) {
+	const key = `${item.id}-${item.city}`;
+	const existingIndex = aiInsightComponents.value.findIndex(
+		(component) => `${component.id}-${component.city}` === key
+	);
+	if (existingIndex >= 0) {
+		aiInsightComponents.value.splice(existingIndex, 1);
+		return;
+	}
+	if (aiInsightComponents.value.length >= 4) {
+		dialogStore.showNotification("fail", "AI 解讀最多選取 4 個組件");
+		return;
+	}
+	aiInsightComponents.value.push({
+		id: item.id,
+		name: item.name,
+		index: item.index,
+		city: item.city,
+	});
+}
+
+function clearAiInsightSelection() {
+	aiInsightComponents.value = [];
+}
+
+async function runAiInsight() {
+	if (aiInsightComponents.value.length < 2) {
+		dialogStore.showNotification("fail", "請至少選取 2 個組件");
+		return;
+	}
+	const city = contentStore.currentDashboard?.city || aiInsightComponents.value[0]?.city || "taipei";
+	await chatStore.insightSelectedComponents(aiInsightComponents.value, city);
+	dialogStore.showNotification("success", "AI 解讀已送出，請打開小幫手查看結果");
+}
 
 function handleOpenSettings() {
 	contentStore.editDashboard = JSON.parse(
@@ -88,11 +131,14 @@ function handleMoreInfo(item) {
       :city-tag="contentStore.cityManager.getTagList(contentStore.currentDashboard?.city)"
       :favorite-btn="authStore.token ? true : false"
       :is-favorite="contentStore.favorites?.components.includes(item.id)"
+      :ai-insight-btn="contentStore.currentDashboard?.index?.includes('sustainable')"
+      :is-ai-insight-selected="aiInsightComponentKeys.has(`${item.id}-${item.city}`)"
       @favorite="
         (id) => {
           toggleFavorite(id,item.name,item.city);
         }
       "
+      @toggle-ai-insight="toggleAiInsight"
       @info="
         (item) => {
           handleMoreInfo(item);
@@ -114,6 +160,22 @@ function handleMoreInfo(item) {
         }
       }"
     />
+    <div
+      v-if="aiInsightComponents.length > 0"
+      class="dashboard-ai-insight"
+    >
+      <p>已選取 {{ aiInsightComponents.length }} 個組件</p>
+      <button @click="runAiInsight">
+        <span>auto_awesome</span>
+        解讀所選組件
+      </button>
+      <button
+        class="dashboard-ai-insight-clear"
+        @click="clearAiInsightSelection"
+      >
+        清除
+      </button>
+    </div>
     <MoreInfo />
     <ReportIssue />
   </div>
@@ -148,11 +210,14 @@ function handleMoreInfo(item) {
           contentStore.currentDashboard.icon !== 'favorite'
       "
       :is-favorite="contentStore.favorites?.components.includes(item.id)"
+      :ai-insight-btn="contentStore.currentDashboard?.index?.includes('sustainable')"
+      :is-ai-insight-selected="aiInsightComponentKeys.has(`${item.id}-${item.city}`)"
       @favorite="
         (id) => {
           toggleFavorite(id,item.name,item.city);
         }
       "
+      @toggle-ai-insight="toggleAiInsight"
       @info="
         (item) => {
           handleMoreInfo(item);
@@ -180,6 +245,22 @@ function handleMoreInfo(item) {
       }
       "
     />
+    <div
+      v-if="aiInsightComponents.length > 0"
+      class="dashboard-ai-insight"
+    >
+      <p>已選取 {{ aiInsightComponents.length }} 個組件</p>
+      <button @click="runAiInsight">
+        <span>auto_awesome</span>
+        解讀所選組件
+      </button>
+      <button
+        class="dashboard-ai-insight-clear"
+        @click="clearAiInsightSelection"
+      >
+        清除
+      </button>
+    </div>
     <MoreInfo />
     <ReportIssue />
   </div>
@@ -280,6 +361,47 @@ function handleMoreInfo(item) {
 				border-top: solid 4px var(--color-highlight);
 				animation: spin 0.7s ease-in-out infinite;
 			}
+		}
+	}
+
+	&-ai-insight {
+		position: sticky;
+		bottom: var(--font-s);
+		z-index: 5;
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: var(--font-s);
+		width: fit-content;
+		max-width: 100%;
+		margin: 0 auto;
+		padding: 8px 12px;
+		border: solid 1px var(--color-border);
+		border-radius: 8px;
+		background-color: var(--color-component-background);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+
+		p {
+			color: var(--color-normal-text);
+			font-size: var(--font-s);
+			white-space: nowrap;
+		}
+
+		button {
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			color: var(--color-highlight);
+			font-size: var(--font-s);
+			white-space: nowrap;
+
+			span {
+				font-family: var(--font-icon);
+			}
+		}
+
+		&-clear {
+			color: var(--color-complement-text) !important;
 		}
 	}
 }

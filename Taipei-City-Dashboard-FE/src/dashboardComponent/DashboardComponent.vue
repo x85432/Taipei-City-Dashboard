@@ -72,6 +72,8 @@ const props = defineProps({
 	isFavorite: { type: Boolean, default: false },
 	deleteBtn: { type: Boolean, default: false },
 	addBtn: { type: Boolean, default: false },
+	aiInsightBtn: { type: Boolean, default: false },
+	isAiInsightSelected: { type: Boolean, default: false },
 	infoBtn: { type: Boolean, default: false },
 	infoBtnText: { type: String, default: "組件資訊" },
 	toggleDisable: { type: Boolean, default: false },
@@ -84,6 +86,7 @@ const emits = defineEmits([
 	"favorite",
 	"delete",
 	"add",
+	"toggleAiInsight",
 	"info",
 	"toggle",
 	"filterByParam",
@@ -607,6 +610,14 @@ function returnChartComponent(name, svg) {
           <span>add_circle</span>
         </button>
         <button
+          v-if="aiInsightBtn"
+          :class="{ isAiInsightSelected: isAiInsightSelected }"
+          title="加入 AI 解讀"
+          @click="$emit('toggleAiInsight', config)"
+        >
+          <span>auto_awesome</span>
+        </button>
+        <button
           v-if="favoriteBtn"
           :class="{
             isfavorite: isFavorite,
@@ -973,6 +984,10 @@ button:hover {
 				&:hover {
 					color: rgb(160, 112, 106);
 				}
+			}
+
+			button.isAiInsightSelected span {
+				color: var(--color-highlight);
 			}
 		}
 

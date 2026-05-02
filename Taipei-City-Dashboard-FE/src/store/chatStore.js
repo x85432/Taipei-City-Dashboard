@@ -37,7 +37,7 @@ export const useChatStore = defineStore('chat', () => {
     	chatData.value.push({ id: chatData.value.length + 1, isDefault: false, ...newChatData });
   	};
 
-  	const addQueryData = async (newChatData) => {
+	const addQueryData = async (newChatData) => {
 
     	chatData.value.push({ id: chatData.value.length + 1, isDefault: false, ...newChatData });
 
@@ -101,6 +101,52 @@ export const useChatStore = defineStore('chat', () => {
 		saveChatLog(newChatData.content, recommendComponents.value);
   	};
 
+	const aiTools = () => [
+		{
+			type: "function",
+			function: {
+				name: "search_dashboard_components",
+				description: "當使用者詢問任何與城市、生活品質、交通、政策相關的探索性問題時，使用此工具來搜尋系統內有哪些可用的儀表板組件資料。傳入的關鍵字請盡量精簡為名詞，例如將『想了解台北市的交通狀況』轉換為『台北 交通』進行搜尋。",
+				parameters: {
+					type: "object",
+					properties: {
+						query: {
+							type: "string",
+							description: "要搜尋的關鍵字，例如 '商圈活化' 或 '智慧交通'"
+						}
+					},
+					required: ["query"]
+				}
+			}
+		},
+		{
+			type: "function",
+			function: {
+				name: "get_selected_components_context",
+				description: "當使用者已經選取數個儀表板組件，並要求解釋它們的關聯、脈絡或洞察時使用。此工具會根據 component_ids 與 city 回傳組件描述、用途、來源、限制與少量樣本資料。",
+				parameters: {
+					type: "object",
+					properties: {
+						component_ids: {
+							type: "array",
+							items: { type: "integer" },
+							description: "使用者選取的 components.id，最多 4 個"
+						},
+						city: {
+							type: "string",
+							description: "城市範圍，例如 taipei 或 metrotaipei"
+						},
+						sample_limit: {
+							type: "integer",
+							description: "每個組件最多取幾筆樣本資料"
+						}
+					},
+					required: ["component_ids", "city"]
+				}
+			}
+		}
+	];
+
 	const chatWithAI = async (newChatData) => {
 		// 1. 先把使用者的話加到畫面
 		chatData.value.push({ id: chatData.value.length + 1, isDefault: false, ...newChatData });
@@ -125,25 +171,7 @@ export const useChatStore = defineStore('chat', () => {
 			const response = await http.post("/ai/chat/twai", {
 				messages: messages,
 				stream: false, // 目前先使用非串流模式
-				tools: [
-					{
-						type: "function",
-						function: {
-							name: "search_dashboard_components",
-							description: "當使用者詢問任何與城市、生活品質、交通、政策相關的探索性問題時，使用此工具來搜尋系統內有哪些可用的儀表板組件資料。傳入的關鍵字請盡量精簡為名詞，例如將『想了解台北市的交通狀況』轉換為『台北 交通』進行搜尋。",
-							parameters: {
-								type: "object",
-								properties: {
-									query: {
-										type: "string",
-										description: "要搜尋的關鍵字，例如 '商圈活化' 或 '智慧交通'"
-									}
-								},
-								required: ["query"]
-							}
-						}
-					}
-				],
+				tools: aiTools(),
 				tool_choice: "auto"
 			});
 
@@ -176,6 +204,54 @@ export const useChatStore = defineStore('chat', () => {
 		}
 	};
 
+	const insightSelectedComponents = async (components, city = 'taipei') => {
+		const componentIds = components.map((item) => item.id);
+		const componentNames = components.map((item) => item.name).join('、');
+		const prompt = `請解讀我選取的永續環境組件之間的關聯。component_ids=${JSON.stringify(componentIds)}, city=${city}。請用繁體中文回答，並固定分成「各自代表什麼」、「可能的關聯」、「不能直接推論」、「下一步可以看什麼」四段。`;
+
+		chatData.value.push({
+			id: chatData.value.length + 1,
+			role: 'user',
+			isDefault: false,
+			content: `解讀所選組件：${componentNames}`,
+		});
+
+		try {
+			const response = await http.post("/ai/chat/twai", {
+				messages: [
+					{
+						role: "system",
+						content: "你是臺北城市儀表板的永續環境資料解讀助理。使用者提供 component_ids 時，你必須先呼叫 get_selected_components_context 取得組件脈絡，再根據工具結果回答。回答要具體、保守，避免硬推因果。"
+					},
+					{
+						role: "user",
+						content: prompt
+					}
+				],
+				stream: false,
+				tools: aiTools(),
+				tool_choice: "auto"
+			});
+
+			if (response.data?.status === "success" && response.data.data?.content) {
+				const aiResponseContent = response.data.data.content;
+				addChatData({
+					role: 'bot',
+					content: aiResponseContent,
+				});
+				saveChatLog(prompt, aiResponseContent);
+			} else {
+				throw new Error("AI response format error");
+			}
+		} catch (error) {
+			console.error("AI Insight Error:", error);
+			addChatData({
+				role: 'bot',
+				content: "抱歉，目前無法產生組件解讀，請稍後再試或檢查後端 AI 設定。",
+			});
+		}
+	};
+
 	const saveChatLog = async(question, answer) => {
 		try {
         	const formData = new FormData();
@@ -199,5 +275,5 @@ export const useChatStore = defineStore('chat', () => {
       	}
 	};
 
-	return { chatData, addChatData, addQueryData, chatWithAI, saveChatLog }
+	return { chatData, addChatData, addQueryData, chatWithAI, insightSelectedComponents, saveChatLog }
 })
