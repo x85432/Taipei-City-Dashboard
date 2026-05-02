@@ -60,7 +60,7 @@ VALUES
         {"key":"phone","name":"電話"}
     ]'
 );
-
+-- Query Charts
 INSERT INTO public.query_charts (
     index,
     history_config,
