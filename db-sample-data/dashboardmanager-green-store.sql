@@ -24,15 +24,15 @@ WHERE "index" IN (
 INSERT INTO public.component_charts ("index", color, types, unit, levels, ranking_config)
 VALUES (
     'green_store_distribution',
-    ARRAY['#36C2A0', '#74D4A8', '#F8CF58', '#F5AD4A', '#F05D5E'],
+    ARRAY['#25423A', '#2F6957', '#3F9B72', '#6DCC7A', '#D4F46B'],
     ARRAY['DistrictChart', 'RankingOverviewChart'],
     '家',
     '[
-        {"label":"少","fullLabel":"資源較少","min":0,"max":50},
-        {"label":"中低","fullLabel":"中低密度","min":51,"max":200},
-        {"label":"中","fullLabel":"中密度","min":201,"max":500},
-        {"label":"多","fullLabel":"高密度","min":501,"max":900},
-        {"label":"極多","fullLabel":"極高密度","min":901,"max":1300}
+        {"label":"很少","fullLabel":"資源很少","min":0,"max":50},
+        {"label":"少","fullLabel":"資源較少","min":51,"max":200},
+        {"label":"中","fullLabel":"中等密度","min":201,"max":500},
+        {"label":"多","fullLabel":"資源較多","min":501,"max":900},
+        {"label":"很多","fullLabel":"資源很多","min":901,"max":1300}
     ]'::json,
     '{
         "order": "desc",
@@ -71,12 +71,12 @@ VALUES
             "interpolate",
             ["linear"],
             ["to-number", ["get", "store_count"], 0],
-            0, "#173A32",
-            50, "#1F6F5E",
-            200, "#36C2A0",
-            500, "#F8CF58",
-            900, "#F05D5E",
-            1300, "#AF4137"
+            0, "#182E29",
+            50, "#25423A",
+            200, "#2F6957",
+            500, "#3F9B72",
+            900, "#6DCC7A",
+            1300, "#D4F46B"
         ],
         "fill-opacity": [
             "interpolate",
@@ -107,12 +107,12 @@ VALUES
             "interpolate",
             ["linear"],
             ["to-number", ["get", "store_count"], 0],
-            0, "#173A32",
-            50, "#1F6F5E",
-            200, "#36C2A0",
-            500, "#F8CF58",
-            900, "#F05D5E",
-            1300, "#AF4137"
+            0, "#182E29",
+            50, "#25423A",
+            200, "#2F6957",
+            500, "#3F9B72",
+            900, "#6DCC7A",
+            1300, "#D4F46B"
         ],
         "fill-opacity": [
             "interpolate",

@@ -33,6 +33,15 @@ DO $$
 DECLARE
     v_legacy_component_id integer;
 BEGIN
+    -- Clear legacy component ids even if their component rows were already
+    -- deleted in a previous seed run.
+    FOREACH v_legacy_component_id IN ARRAY ARRAY[320, 330, 340, 350]
+    LOOP
+        UPDATE public.dashboards
+        SET components = array_remove(components, v_legacy_component_id)
+        WHERE v_legacy_component_id = ANY(components);
+    END LOOP;
+
     FOR v_legacy_component_id IN
         SELECT id::integer
         FROM public.components
@@ -41,6 +50,25 @@ BEGIN
         UPDATE public.dashboards
         SET components = array_remove(components, v_legacy_component_id)
         WHERE v_legacy_component_id = ANY(components);
+    END LOOP;
+END $$;
+
+-- The map layer drawer fetches map-layers dashboards without a city query.
+-- Components without query_charts/map_config make the backend fail while
+-- parsing map_config, so keep unsupported legacy custom components out.
+DO $$
+DECLARE
+    v_component_id integer;
+BEGIN
+    FOR v_component_id IN
+        SELECT id::integer
+        FROM public.components
+        WHERE "index" IN ('fixed_camera_violation_analysis')
+    LOOP
+        UPDATE public.dashboards
+        SET components = array_remove(components, v_component_id)
+        WHERE "index" IN ('map-layers-taipei', 'map-layers-metrotaipei')
+          AND v_component_id = ANY(components);
     END LOOP;
 END $$;
 
