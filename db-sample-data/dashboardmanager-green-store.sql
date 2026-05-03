@@ -24,7 +24,7 @@ WHERE "index" IN (
 INSERT INTO public.component_charts ("index", color, types, unit, levels, ranking_config)
 VALUES (
     'green_store_distribution',
-    ARRAY['#25423A', '#2F6957', '#3F9B72', '#6DCC7A', '#D4F46B'],
+    ARRAY['#3A8B72', '#45A980', '#62C879', '#9BE86A', '#E8FF7A'],
     ARRAY['DistrictChart', 'RankingOverviewChart'],
     '家',
     '[
@@ -71,20 +71,20 @@ VALUES
             "interpolate",
             ["linear"],
             ["to-number", ["get", "store_count"], 0],
-            0, "#182E29",
-            50, "#25423A",
-            200, "#2F6957",
-            500, "#3F9B72",
-            900, "#6DCC7A",
-            1300, "#D4F46B"
+            0, "#2E6F61",
+            50, "#3A8B72",
+            200, "#45A980",
+            500, "#62C879",
+            900, "#9BE86A",
+            1300, "#E8FF7A"
         ],
         "fill-opacity": [
             "interpolate",
             ["linear"],
             ["zoom"],
-            9, 0.45,
-            13, 0.58,
-            16, 0.68
+            9, 0.56,
+            13, 0.68,
+            16, 0.78
         ],
         "fill-outline-color": "rgba(255,255,255,0.45)"
     }'::json,
@@ -107,20 +107,20 @@ VALUES
             "interpolate",
             ["linear"],
             ["to-number", ["get", "store_count"], 0],
-            0, "#182E29",
-            50, "#25423A",
-            200, "#2F6957",
-            500, "#3F9B72",
-            900, "#6DCC7A",
-            1300, "#D4F46B"
+            0, "#2E6F61",
+            50, "#3A8B72",
+            200, "#45A980",
+            500, "#62C879",
+            900, "#9BE86A",
+            1300, "#E8FF7A"
         ],
         "fill-opacity": [
             "interpolate",
             ["linear"],
             ["zoom"],
-            9, 0.45,
-            13, 0.58,
-            16, 0.68
+            9, 0.56,
+            13, 0.68,
+            16, 0.78
         ],
         "fill-outline-color": "rgba(255,255,255,0.45)"
     }'::json,
